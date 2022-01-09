@@ -1,0 +1,315 @@
+---
+title: "Novel Corona Virus:"
+description: | 
+  Is there an end in sight
+date: July 28, 2021
+author:
+  - name: "Eric Holdaway"
+    url: https://github.com/ericholdaway
+    affiliation: Texas A&M University
+    affiliation_url: https://www.tamu.edu
+output: radix::radix_article
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Overview, include=FALSE}
+# This is the actual final report for STAT 684.
+```
+
+```{r Libraries, include = FALSE}
+# Not to be shown in final report.
+# Packages used in the analysis.
+library(tseries)  # adf.test
+library(forecast) # forecasting.
+library(astsa)    # sarima function.
+library(ggplot2)  # gglpots.
+```
+
+
+### Introduction:  
+
+COVID-19 has been an big health issue around the world for the past year and a half. Because of this the number one question on everyone's mind is; "When will this be over?". Luckily for everyone, there are some incredible organizations, like the Center for Disease Control (CDC), and The World Health Organization (WHO), who are filled with some amazing women and men working very hard to make this very thing happen. But, while they are working on a cure and some fix to this problem, we still don't get any closer to answering the important question on everyone's mind. Lucky for us, those same organizations have collected data about COVID-19 and we can use that data to make some predictions and try to get an answer to that important question.
+
+Currently there is a lot of research being done on this very question, but it is a problem which has a large number variables and interactions and it could take a long time to figure out the answer to the question, and it might be so long that it will have already ended. Organizations and countries are still making headway in the attempt to eliminate the virus, but there are still spikes in the number of cases due to lack of vaccinations and variant strains of the virus.
+
+In this report, I will be focusing on answering this question for the United States specifically. I will be using data from kaggle.com which is provided directly from The World Health Organization. My goal will be to create an accurate predictive model for the number of expected cases in the United States in the upcoming months. My hope is that in finding a reasonable prediction, we will get a better understanding of how well our current preventable measures are doing and whether or not we need to make stricter measures in order to achieve our goal of eliminating the virus and ultimately saving peoples lives. I anticipate some issues, which will be explained later on in the paper at the appropriate places, which we may need to figure out before moving on to looking at the world as whole.
+
+
+### Background:
+
+The coronavirus SARS-CoV-2 is a virus which causes respiratory illness. It is better known as COVID-19 and has been a major concern for most of the world since it was first identified in December of 2019. While a most people who are infected with COVID-19 suffer minor symptoms to no symptoms at all, the reasons for this concern are a large number of patients suffer long lasting health issues or even death. As of the data of this papers publication, there have been a total of 195 million cases and 4.1 million deaths world wide. 
+
+COVID-19 is very similar to the common cold, and symptoms usually show up in a relatively short time, two to 14 days. Those infected can remain contagious for a varying period of time based upon the infected individuals immune system. Common cold symptoms are; cough, fever or chills, fatigue, sore throat, etc., but there are two new symptoms for COVID-19; loss of taste or smell, and shortness of breath. In most major countries there is testing going on to check for the presence of the virus and in the United States it is free almost everywhere there is testing going on. Despite all of this it is still a major concern and we are starting to see another spike in the number of cases.
+
+
+Background Information:  
+https://www.hopkinsmedicine.org/health/conditions-and-diseases/coronavirus
+
+Current COVID Numbers:  
+https://www.who.int/emergencies/diseases/novel-coronavirus-2019
+
+
+### Data:
+
+I acquired my data from Kaggle.com, which contained observational data procured from The World Health Organization. The data contained the counts, by day, of the current total number of confirmed COVID cases by country. It was very easy to acquire, in good shape, and there was no missing data from the data set and so no alterations to the data were needed.
+
+Now for some assumptions about the data which will help direct me to the analysis technique which I will be using.  First, since we are looking at data on the spread of a virus, I am assuming that if the number of people infected is large then they, in turn, will have the ability to infect a larger number of people. This tells me that our data is correlated, more specifically it's autocorrelated. Meaning that previous value(s) will have a direct impact up upcoming values. Because of this we will be doing a time series analysis. Second, the data is actual observational count data and there will be outliers. Even though there are outliers, I will not be doing anything to get rid of them or make adjustments to them. This goes back to the first assumption, of the data being autocorrelated. Since the data values are directly influenced by previous data values, I feel it would be inappropriate and incorrect to remove those values. Third, while we have a lot of data on the virus, it really hasn't been going on for a long time. Because of this, we will probably be limited in our analysis techniques.
+
+To get started, below is the initial graph of our data.
+
+
+```{r Data, echo=FALSE}
+setwd("C:/Users/erich/OneDrive/Documents/School/STAT 684/Corona_Research/Corona_Data")
+data <- read.csv("time_series_covid_19_confirmed.csv", header = TRUE)
+new_data <- read.csv("new_time_series_covid19_confirmed_global.csv", header = TRUE)
+
+# Find the position of us data.
+# us_pos_con = 252
+us_pos_con <- which(data[,2] == "US")
+# us_pos_new = 255
+us_pos_new <- which(new_data[,2] == "US")
+
+# Removal of meta data.
+clean_data <- as.matrix(data[,5:(dim(data)[2])])
+new_clean_data <- as.matrix(new_data[,5:(dim(new_data)[2])])
+
+us_data <- ts(clean_data[252,], frequency=1) # start=c(2020,1), end=c(2021,5))
+#ggtsdisplay(us_data)
+
+#clean_data <- data[us_pos_con,5:(dim(data)[2])]
+# Setup of data for gglot.
+x <- seq(1,494,1)
+gg_data <- rbind(clean_data[252,],x)
+rownames(gg_data) <- c("US","Days")
+gg_data <- as.data.frame(t(gg_data))
+
+
+ggplot(gg_data, aes(x=Days,y=US)) +
+  geom_point() +
+  labs(
+    title = "Confirmed Cases in the United States",
+    x = "Day Count",
+    y = "Total Confimed Count"
+      )
+```
+
+Data Acquisition.  
+https://www.kaggle.com/sudalairajkumar/novel-corona-virus-2019-dataset
+
+### Model:
+
+For this data set I'll be using an overall time series approach to the analysis due to the autocorrelated nature of the data, but more specifically a univariate time series forecasting. This means that we are making the assumption that we will be able to make an accurate prediction using only the previous values in the data set and nothing else. Some of our choices for parts of the analysis will differ based upon values and things that we see while doing initial analysis of the data, but this will be explained during the appropriate steps in the Experimental Results section. One of the main guides that I used for this analysis was from MachineLearningPlus.com and I have provided the link at the end of this section of the report. While the guide is written for python I performed the analysis in R. I'll be looking at a confidence level of 0.10 for my analysis. I'm picking a slightly higher level, than 0.05, due to my initial thoughts on being limited on analysis techniques due to the shorter time period of data we will be dealing with which may cause issues with accuracy of our prediction.
+
+
+Machine Learning Website for Time Series Analysis.  
+https://www.machinelearningplus.com/time-series/time-series-analysis-python/
+
+
+### Analysis: Stationary Testing
+
+Starting off we need to perform two essential tests to determine if our data is stationary. This just means that our data has a constant mean, variance, and autocorrelation over time. If this is the case then they can be useful in determining our predictive model. 
+
+The first test is called the Augmented Dickey-Fuller test. It is just trying to determine if the data is just simply stationary. If our data isn't stationary then we will start by performing a simple "differencing" of the data to try and remove any trends that might exist in the data, i.e. non-constant mean, variance, and or autocorrelation. What this means is that we will take a data point and subtract the previous point from this, and repeat throughout the full data set. Since our data is the current total number of confirmed cases since they started taking data ,I will start with the data being difference once to start. The first difference will change it from total to the number of new cases for each day, which is more start appropriate for time series analysis.
+
+Below is a graph of the data after it's been differenced once.
+
+```{r differencing 1, echo=FALSE}
+# Just used to demonstrate what is going on and what it looks like.
+us_diff_test <- diff(us_data,differences=1)
+x_test <- seq(1,493,1)
+gg_test <- rbind(us_diff_test,x)
+rownames(gg_test) <- c("US","Days")
+gg_test <- as.data.frame(t(gg_test))
+
+ggplot(gg_test, aes(x=Days,y=US)) +
+  geom_point() +
+  labs(
+    title = "Confirmed Cases in the United States",
+    x = "Day Count",
+    y = "Daily Confimed Count"
+      )
+```
+
+```{r Differencing 2, echo=FALSE}
+us_diff <- diff(us_data, differences=2)
+```
+
+**Augmented Dickey-Fuller (ADF) Test:** Testing Hypothesis  
+This is the first stationary test we will be performing to try and get our data stationary.
+
+$$H_0:\text{series is non-stationary.}$$
+$$H_a: \text{series is stationary.}$$
+I'm not showing some of the preliminary tests to get to what we are looking at, but in order to make the data stationary it was necessary to difference the data twice.
+
+```{r Dickey-Fuller Test, echo=FALSE}
+adf.test(us_diff,alternative="stationary")
+```
+
+The Dickey_Fuller value needs to be negative and the more negative it is, the more stationary the model is. Because the p-value = 0.01, this tells us that the test has significant results for the data being stationary, i.e. if it is below 0.05, then we assume $H_a$ and if above 0.05 we assume $H_0$. So now on to the next test.
+
+**Kwiatkowski-Phillips-Schmidt-Shin (KPSS) Test:** Testing Hypothesis  
+This is also a stationary test, but this test also checks the data to see if the data is stationary even if there is a trend in the data. Since the ADF test came back stationary, we should expect this test to be stationary as well.  
+
+$$H_0:\text{series is stationary.}$$
+$$H_a: \text{series is non-stationary.}$$
+```{r KPSS Test, echo=FALSE}
+kpss.test(us_diff, null="Trend")
+```
+
+Once again, the value that we are looking for is the p-value = 0.10.  This tells us that we are going to be assuming $H_0$ and that the data is stationary.  
+
+With both tests coming back stating that our data is stationary, we can be fairly certain that it is stationary, but we have one potential issue. Since there is no trend in our data it might be harder to get an accurate prediction result.  
+
+### Analysis: Forecasting
+
+We will be using the Auto Regressive Integrated Moving Average (ARIMA) method which states that future data can be forecast based solely on the previous data. While this is the best approach, it is a model which really needs a computer to produce as the calculations are very tedious and long. I'll explain below.  
+
+**ARIMA Base Model:**  
+$$Y_t=\alpha+\beta_1Y_{t-1}+\beta_2Y_{t-2}+..+\beta_pY_{t-p}\epsilon_t+\phi_1\epsilon_{t-1}+\phi_2\epsilon_{t-2}+..+\phi_z\epsilon_{t-q}$$
+First, I need to explain the concept of lag. A lag of one, means that you are looking to the immediately previous data point. A lag of two, is referring to the second previous point, etc. So lag as a whole is about looking back at previous data points and the lag number referes to how many points back you need to look.  
+
+So to explain this model in the simplest way. The Y-values are actual lag values and the total number of them is dictated by the number you choose for p below.  Which means that if we have two Y-values then you'd need the two previous number counts in order to get the values for your model. The epsilon values are the forecast lag errors. So what this works the same as for the Y-values except that you would need the previous lag errors to use in the calculation. The number of epsilons in the model are determined by the number you choose for q below. In total it is what is called a linear combination model where it is just a simple combination of linear terms, which leads the overall model to being linear as well.  
+
+There are three values we need to try and figure out for the ARIMA model and we can use the differencing information graph to figure these out. The three values are as follows:  
+p = order of Auto Regressive (AR) Term, and number of AR terms in the model.  
+q = order of Moving Average (MA) Term, and the number of MA terms in the model.  
+d = number of differencing needed to make data stationary.  
+
+```{r Forecasting 1, echo=FALSE}
+ggtsdisplay(us_diff,main="Confirmed Cases in the United States: Differenced Twice",ylab="Daily Confirmed Cases")
+```
+
+The upper graph is of the initial data set differenced twice, where we have Confirmed Counts on the y-axis and Day Count on the x-axis.    
+
+The lower left graph is the AutoCorrelation Function (ACF) which tells you how how many previous values (lags) are influential to the current value. We would like this to get between the critical value (horizontal dashed line) quickly and mostly stay there and getting smaller as the lags increase.  
+
+The lower right graph is the Partial AutoCorrelation Function (PACF) which is similar to ACF graph, but it ignores the values close to the current value to get a better idea of how much the earlier values really contribute. We are looking for a similar trend as for ACF graph.  
+
+Looking at the ACF graph, we see that the fist lag is negative, this tells us that we have differenced the data enough and maybe too much. While the graph isn't perfect with the lags going outside the critical lines occasionally, it doesn't look horrible. Since we had a differencing value of 2, we will us this for our d value in our model.  
+
+Still looking at the ACF graph, we see that only the first term is well beyond the critical value line, therefore we have a base q value of 1, but since it is negative, then a differencing of 2 is too much and therefore we need to add an additional 1 too it. Therefore our q value = 2.  
+
+Looking at our PACF graph, we have approximately 8 lags which are above the critical value line, because of this we will most likely us 8 as our value for p. But, because the third value is really close to the line, it might create a better model using 3 for p.  
+
+There is a great function which will automatically go through the data and check to see which values will give us the best prediction based of of the lowest AIC value. While I did go through several different tests myself to see if there was any real difference between them, and statistically there wasn't as the difference between all AIC values was less than 1, so they were statistically similar.  
+
+**Automatic ARIMA:**  
+
+```{r Arima Model, echo=FALSE}
+auto.arima(us_data,stepwise=FALSE,approximation=FALSE)
+```
+
+From this function we see that it chose the values use a p = 3, p = 2, and d = 2 for the function. Now we plug those values into the ARIMA function to see how well those values actually perform. It is important to note that the function chose a value of 3 for p, but this isn't surprising as it was something which we anticipated might happen originally.  
+
+**ARIMA:**  
+
+```{r SArima Model 1, include=FALSE}
+# Need this value for forecasting.
+us_arima <- arima(us_data,order=c(3,2,2))
+test <- sarima(us_data,3,2,2)
+```
+
+```{r SArima Model 2, echo=FALSE}
+test$fit
+test$ttable
+test$AIC
+```
+
+Looking at the p-values for the coefficients we see that all of them are highly significant which is a good thing for our model as we shouldn't need to mess around with dropping coefficients to check for significance as the automatic function should have already done that.  
+
+Now we can go ahead and look at the results of our modeling and check to see how accurate it really is.   
+
+### Experimental Results:
+
+```{r Error Function, include=FALSE}
+plotForecastErrors <- function(forecasterrors)
+{
+   # make a histogram of the forecast errors:
+   mybinsize <- IQR(forecasterrors)/4
+   mysd   <- sd(forecasterrors)
+   mymin  <- min(forecasterrors) - mysd*5
+   mymax  <- max(forecasterrors) + mysd*3
+   # generate normally distributed data with mean 0 and standard deviation mysd
+   mynorm <- rnorm(10000, mean=0, sd=mysd)
+   mymin2 <- min(mynorm)
+   mymax2 <- max(mynorm)
+   if (mymin2 < mymin) { mymin <- mymin2 }
+   if (mymax2 > mymax) { mymax <- mymax2 }
+   # make a red histogram of the forecast errors, with the normally distributed data overlaid:
+   mybins <- seq(mymin, mymax, mybinsize)
+   hist(forecasterrors, col="red", freq=FALSE, breaks=mybins, xlab="Forecast Errors", main="Histogram of Forecast Errors")
+   # freq=FALSE ensures the area under the histogram = 1
+   # generate normally distributed data with mean 0 and standard deviation mysd
+   myhist <- hist(mynorm, plot=FALSE, breaks=mybins)
+   # plot the normal curve as a blue line on top of the histogram of forecast errors:
+   points(myhist$mids, myhist$density, type="l", col="blue", lwd=2)
+}
+```
+
+Below is the graph of the tail end of our data and zoomed in so we can clearly see the prediction line and the confidence intervals.  
+
+**Prediction Plot:**
+```{r Forecast, echo=FALSE}
+us_forecast <- forecast(us_arima,model="Arima",level=c(10,95),h=59)
+plot(us_forecast,xlim=c(480,560),ylim=c(32000000,35000000),main="ARIMA Forecast",ylab="Total Confirmed Cases",xlab="Day Count")
+```
+
+**Notes:**  
+Black Line: is the tail end of our initial data.  
+Blue Line:is the forecast line, showing our prediction.  
+Graph Area: is the 95% confidence interval, which basically is the area where we expect to find the new data to actually lie almost no matter what happens to the data.  
+Blue Area: is the 10% confidence interval, were we should really find the data if our model is accurate.  
+
+**Prediction Residual Plot:**  
+```{r Forecast Residuals, echo=FALSE}
+plot.ts(us_forecast$residuals,main="Residuals vs. Time",ylab="Residuals")
+```
+
+Looking at the residual plot we can clearly see that the data doesn't look like it is uniform all the way across. This tells us that we do not have a constant variance throughout the data and we could expect our prediction to be a little less accurate because of this. This isn't very surprising as we expected to have trouble arriving at a good model due to our results obtained from the ADF and KPSS stationary tests.  
+
+**Pediction Residual Error Plot:**  
+```{r Forecast Errors, echo=FALSE}
+plotForecastErrors(us_forecast$residuals)
+```
+
+In the error plot we have a histogram of or error values and we also have a blue line which represents a normal distribution. We expect our error terms to have a normal distribution and they are not far off. We see that the error terms seem to be centered around a mean of zero which is good for our prediciton. There are smaller tails on either side of the data and with the shorter tails the expected higher peak in the middle. Even though it isn't a perfect match it isn't bad and so I expect that our prediction wont be too far off as it is close to normal.  
+
+**Prediction Check:**  
+Now that we have our prediction model and we know it isn't perfect, but shouldn't be too far off, we can check out how accurate our model was by downloading the new counts and adding them to the prediction plot and see if they fall in the 10% prediction area as we hope.  
+
+**Final Plot:**  
+```{r Forecast 2, echo=FALSE}
+plot(us_forecast,xlim=c(480,560),ylim=c(32000000,35000000),main="ARIMA Forecast with Current Data",ylab="Total Confirmed Cases",xlab="Day Count")
+
+# Placement of new data on forecasting plot, to check for accuracy.
+new_us_values <- new_clean_data[us_pos_new <- which(new_data[,2] == "US"),(dim(clean_data)[2]+1):dim(new_clean_data)[2]]
+x <- seq(495,(495+58),1)
+
+points(x=x, y=new_us_values, col="red")
+abline(h=clean_data[252,494], col="orange")
+```
+
+**Notes:**  
+Black Line: is the tail end of our initial data.  
+Blue Line: is the forecast line, showing our prediction.  
+Orange Line: is the maximum value of the original data to show growth contrast.  
+Red Circles: these are the new total confirmed case numbers to test the predictive model against.  
+Graph Area: is the 95% confidence interval, which basically is the area where we expect to find the new data to actually lie almost no matter what happens to the data.  
+Blue Area: is the 10% confidence interval, were we should really find the data if our model is accurate.  
+
+After looking at our prediction with the new data, we can see that even though we anticipated having trouble with an accurate prediction model, we in fact have a fairly accurate prediction. It only fails to predict because of a sudden spike in the number of cases around 2 weeks ago.  Our model prediction was a little higher than the actual count but the actual counts fell within a 10% confidence interval which matches our overall expectation.  
+
+**Final Prediction Model:**  
+$$Y_t=0.7606Y_{t-1}-0.3676Y_{t-2}-0.4494Y_{t-3}-1.3484\epsilon_{t-1}+0.9202\epsilon_{t-2}$$
+
+Even though our model was good and we were even able to check it with new data, we still haven't answered the question, "When will this be over?" Unfortunately the model showed that there was no end in the near future, but even so, we would still be able to make a prediction. The line appeared to be decreasing in the number of cases everyday, the actual data showed the same result initially, but then at the end there was another spike in cases and therefore we would need to perform another analysis on the data to figure out what the new prediction date would be, because there is a drastic change in the number of cases. Luckily for us, we could most likely use the same technique and figure out a solution to our problem.  
+
+### Conclusion:
+In the end and with all things considered, I was able to obtain a good prediction model which yielded accurate results, or at least for the proceeding 59 days. Since our model is a linear combination, the results is that there is in fact no end in sight for COVID-19 and the last few days show that it will most likely get worse before it gets better. On the plus side, as more data is collected, it will be possible to make more complex models which may give better predictions further in the future than this one. Truly the benefit of this analysis is in letting scientist and politicians know if what they are doing is adequate to combat and defeat this virus or if more drastic measures need to be made.  Also, it shows that even though I was limited in what I could do with the data because of the short time in which it was collected, I was still able to make an accurate prediction which could be useful if something deadlier came along and it became urgent to figure out if our precautions were enough.  
+
+### Future Work:
+Next, I would like to work on a multivariate model answering the same question. A lot of data has been collect on this topic on many different levels and it would be very interesting to see look at how other countries models look and the world as a whole.  
